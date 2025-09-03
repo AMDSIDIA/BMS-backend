@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Dashboard API</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        pre { background-color: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test Dashboard API</h1>
+    
+    <div class="test-section info">
+        <h3>📋 Endpoints à tester</h3>
+        <ul>
+            <li><code>/api/dashboard/test</code> - Test simple du module</li>
+            <li><code>/api/dashboard/complete</code> - Dashboard complet avec données</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h3>🔍 Test 1: Endpoint simple</h3>
+        <button onclick="testSimple()">Tester /api/dashboard/test</button>
+        <div id="result1"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>📊 Test 2: Dashboard complet</h3>
+        <button onclick="testComplete()">Tester /api/dashboard/complete</button>
+        <div id="result2"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>🌐 Test 3: CORS et authentification</h3>
+        <button onclick="testWithAuth()">Tester avec token</button>
+        <div id="result3"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000'; // Ajustez selon votre configuration
+        
+        async function testSimple() {
+            const resultDiv = document.getElementById('result1');
+            resultDiv.innerHTML = '<p>⏳ Test en cours...</p>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/dashboard/test`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            <h4>✅ Succès!</h4>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">
+                            <h4>❌ Erreur ${response.status}</h4>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>❌ Erreur de connexion</h4>
+                        <p>${error.message}</p>
+                        <p>Vérifiez que le serveur backend est démarré sur le port 5000</p>
+                    </div>
+                `;
+            }
+        }
+
+        async function testComplete() {
+            const resultDiv = document.getElementById('result2');
+            resultDiv.innerHTML = '<p>⏳ Test en cours...</p>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/dashboard/complete?period=month`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            <h4>✅ Succès!</h4>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">
+                            <h4>❌ Erreur ${response.status}</h4>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>❌ Erreur de connexion</h4>
+                        <p>${error.message}</p>
+                        <p>Vérifiez que le serveur backend est démarré sur le port 5000</p>
+                    </div>
+                `;
+            }
+        }
+
+        async function testWithAuth() {
+            const resultDiv = document.getElementById('result3');
+            resultDiv.innerHTML = '<p>⏳ Test en cours...</p>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/dashboard/complete?period=month`, {
+                    headers: {
+                        'Authorization': 'Bearer test-token-123'
+                    }
+                });
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            <h4>✅ Succès avec authentification!</h4>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">
+                            <h4>❌ Erreur ${response.status}</h4>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>❌ Erreur de connexion</h4>
+                        <p>${error.message}</p>
+                        <p>Vérifiez que le serveur backend est démarré sur le port 5000</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Test automatique au chargement de la page
+        window.onload = function() {
+            console.log('🧪 Page de test chargée');
+            console.log('📊 API Base:', API_BASE);
+        };
+    </script>
+</body>
+</html>

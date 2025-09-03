@@ -41,6 +41,7 @@ app.use('/api/search', require('./routes/search'));
 app.use('/api/scheduled-searches', require('./routes/scheduled-searches'));
 app.use('/api/fichiers-tdr', require('./routes/fichiers-tdr'));
 app.use('/api/auto-search', require('./routes/auto-search'));
+app.use('/api/dashboard', require('./routes/dashboard'));
 
 
 // Health check
@@ -75,21 +76,25 @@ const startServer = async () => {
       console.log('✅ Database initialized successfully');
     } catch (dbError) {
       console.warn('⚠️  Database connection failed, starting server without database...');
-
+      console.warn('⚠️  Server will run with limited functionality');
     }
     
     // Démarrer le serveur
     app.listen(PORT, () => {
       console.log(`🚀 BMS Backend server running on port ${PORT}`);
       console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
+      console.log(`📊 Dashboard test: http://localhost:${PORT}/api/dashboard/test`);
+      console.log(`📊 Dashboard complete: http://localhost:${PORT}/api/dashboard/complete`);
       console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
       
-      // Démarrer le scheduler de recherche automatique
-      try {
-        startScheduler();
-        console.log('🔍 Scheduler de recherche automatique démarré');
-      } catch (error) {
-        console.warn('⚠️  Erreur lors du démarrage du scheduler:', error.message);
+      // Démarrer le scheduler de recherche automatique seulement si la DB est disponible
+      if (process.env.NODE_ENV !== 'test') {
+        try {
+          startScheduler();
+          console.log('🔍 Scheduler de recherche automatique démarré');
+        } catch (error) {
+          console.warn('⚠️  Erreur lors du démarrage du scheduler:', error.message);
+        }
       }
     });
   } catch (error) {
