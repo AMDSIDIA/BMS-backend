@@ -4,97 +4,148 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 require('dotenv').config();
 
-// Import de la configuration de la base de données
-const { initDatabase } = require('./config/database');
-
-// Import du scheduler de recherche automatique
-const { startScheduler } = require('./services/scheduler');
-
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// Middleware
-app.use(helmet());
-app.use(cors({
+// Configuration CORS spécifique pour Vercel
+const corsOptions = {
   origin: [
-    process.env.FRONTEND_URL || 'http://localhost:3000',
-    /^https:\/\/.*\.ngrok\.io$/,
-    /^https:\/\/.*\.ngrok-free\.app$/,
-    /^https:\/\/.*\.ngrok\.app$/
+    "https://ton-frontend.vercel.app", // Votre frontend Vercel
+    "https://*.vercel.app", // Tous les sous-domaines Vercel
+    "https://*.vercel.com", // Domaine principal Vercel
+    process.env.FRONTEND_URL, // Variable d'environnement pour flexibilité
+    process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : null // Local en dev uniquement
+  ].filter(Boolean), // Supprime les valeurs null/undefined
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With',
+    'Accept',
+    'Origin'
   ],
-  credentials: true
+  exposedHeaders: ['X-Total-Count', 'X-Page-Count'],
+  maxAge: 86400 // Cache CORS pendant 24h
+};
+
+// Middleware de sécurité et logging
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
+
+app.use(cors(corsOptions));
 app.use(morgan('combined'));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Routes
+// Middleware de logging des requêtes
+app.use((req, res, next) => {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] ${req.method} ${req.path} - ${req.ip}`);
+  next();
+});
+
+// Routes API
 app.use('/api/auth', require('./routes/auth'));
-app.use('/api/offres', require('./routes/offres'));
-app.use('/api/users', require('./routes/users'));
-app.use('/api/performance', require('./routes/performance'));
-app.use('/api/repartition', require('./routes/repartition'));
-app.use('/api/suivi-resultats', require('./routes/suivi-resultats'));
-app.use('/api/modalites-poles', require('./routes/modalites-poles'));
-app.use('/api/alertes', require('./routes/alertes'));
-app.use('/api/search', require('./routes/search'));
-app.use('/api/scheduled-searches', require('./routes/scheduled-searches'));
-app.use('/api/fichiers-tdr', require('./routes/fichiers-tdr'));
-app.use('/api/auto-search', require('./routes/auto-search'));
-app.use('/api/dashboard', require('./routes/dashboard'));
 
-
-// Health check
+// Health check endpoint
 app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
+  res.json({
+    status: 'OK',
     message: 'BMS Backend API is running',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    port: PORT,
+    cors: {
+      origins: corsOptions.origin,
+      methods: corsOptions.methods
+    }
+  });
+});
+
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    message: 'BMS Backend API',
+    version: '1.0.0',
+    endpoints: {
+      health: '/api/health',
+      auth: '/api/auth/*',
+      docs: '/api/docs'
+    },
     timestamp: new Date().toISOString()
   });
 });
 
-// Error handling middleware
+// Middleware de gestion d'erreur
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ 
-    error: 'Something went wrong!',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+  console.error('❌ Error:', {
+    message: err.message,
+    stack: err.stack,
+    url: req.url,
+    method: req.method,
+    timestamp: new Date().toISOString()
+  });
+
+  // Ne pas exposer les détails d'erreur en production
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  
+  res.status(err.status || 500).json({
+    success: false,
+    error: 'Internal Server Error',
+    message: isDevelopment ? err.message : 'Something went wrong',
+    ...(isDevelopment && { stack: err.stack }),
+    timestamp: new Date().toISOString()
   });
 });
 
-// 404 handler
+// 404 handler pour les routes non trouvées
 app.use('*', (req, res) => {
-  res.status(404).json({ error: 'Route not found' });
+  console.log(`❌ Route not found: ${req.method} ${req.originalUrl}`);
+  
+  res.status(404).json({
+    success: false,
+    error: 'Route not found',
+    message: `Cannot ${req.method} ${req.originalUrl}`,
+    availableEndpoints: [
+      'GET /',
+      'GET /api/health',
+      'POST /api/auth/login'
+    ],
+    timestamp: new Date().toISOString()
+  });
 });
 
-// Initialiser la base de données et démarrer le serveur
+// Démarrer le serveur
 const startServer = async () => {
   try {
-    // Essayer d'initialiser la base de données (optionnel pour les tests)
-    try {
-      await initDatabase();
-      console.log('✅ Database initialized successfully');
-    } catch (dbError) {
-      console.warn('⚠️  Database connection failed, starting server without database...');
-      console.warn('⚠️  Server will run with limited functionality');
-    }
-    
-    // Démarrer le serveur
-    app.listen(PORT, () => {
-      console.log(`🚀 BMS Backend server running on port ${PORT}`);
-      console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
-      console.log(`📊 Dashboard test: http://localhost:${PORT}/api/dashboard/test`);
-      console.log(`📊 Dashboard complete: http://localhost:${PORT}/api/dashboard/complete`);
-      console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log('🚀 BMS Backend Server Started Successfully!');
+      console.log('=' .repeat(50));
+      console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`🔌 Port: ${PORT}`);
+      console.log(`🌐 Server: http://localhost:${PORT}`);
+      console.log(`📊 Health: http://localhost:${PORT}/api/health`);
+      console.log(`🔐 Auth: http://localhost:${PORT}/api/auth/login`);
+      console.log(`🔒 CORS Origins: ${corsOptions.origin.join(', ')}`);
+      console.log('=' .repeat(50));
       
-      // Démarrer le scheduler de recherche automatique seulement si la DB est disponible
-      if (process.env.NODE_ENV !== 'test') {
-        try {
-          startScheduler();
-          console.log('🔍 Scheduler de recherche automatique démarré');
-        } catch (error) {
-          console.warn('⚠️  Erreur lors du démarrage du scheduler:', error.message);
-        }
+      if (process.env.NODE_ENV === 'production') {
+        console.log('🚀 Server is running in PRODUCTION mode');
+        console.log('🔒 CORS restricted to Vercel domains only');
+      } else {
+        console.log('🔧 Server is running in DEVELOPMENT mode');
+        console.log('🌐 CORS allows localhost for development');
       }
     });
   } catch (error) {
@@ -103,4 +154,16 @@ const startServer = async () => {
   }
 };
 
+// Gestion gracieuse de l'arrêt
+process.on('SIGTERM', () => {
+  console.log('🛑 SIGTERM received, shutting down gracefully...');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('🛑 SIGINT received, shutting down gracefully...');
+  process.exit(0);
+});
+
+// Démarrer le serveur
 startServer(); 

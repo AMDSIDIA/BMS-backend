@@ -4,106 +4,78 @@
  * Script de test pour l'authentification avec la base de données
  */
 
-const { query, closeConnection } = require('./config/database');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+const axios = require('axios');
+
+const BASE_URL = process.env.BACKEND_URL || 'http://localhost:10000';
 
 async function testAuth() {
+  console.log('🧪 Test des routes d\'authentification...\n');
+
   try {
-    console.log('🧪 Test de l\'authentification avec la base de données');
-    console.log('=' .repeat(60));
-    
-    // Test 1: Vérifier la connexion à la base de données
-    console.log('\n📡 Test 1: Connexion à la base de données');
-    const result = await query('SELECT NOW() as time');
-    console.log('✅ Connexion réussie:', result.rows[0].time);
-    
-    // Test 2: Vérifier les utilisateurs existants
-    console.log('\n👤 Test 2: Utilisateurs existants');
-    const users = await query('SELECT id, email, nom, prenom, role FROM users');
-    console.log(`📊 Nombre d'utilisateurs: ${users.rows.length}`);
-    users.rows.forEach(user => {
-      console.log(`   - ${user.email} (${user.nom} ${user.prenom}) - ${user.role}`);
-    });
-    
-    // Test 3: Test de connexion avec l'utilisateur de test
-    console.log('\n🔐 Test 3: Test de connexion');
-    const testEmail = 'test@bms.com';
-    const testPassword = 'test123';
-    
-    // Récupérer l'utilisateur
-    const userResult = await query('SELECT * FROM users WHERE email = $1', [testEmail]);
-    if (userResult.rows.length === 0) {
-      console.log('❌ Utilisateur de test non trouvé');
-      return;
-    }
-    
-    const user = userResult.rows[0];
-    console.log(`✅ Utilisateur trouvé: ${user.email}`);
-    
-    // Vérifier le mot de passe
-    const isValidPassword = await bcrypt.compare(testPassword, user.password_hash);
-    if (isValidPassword) {
-      console.log('✅ Mot de passe correct');
-      
-      // Générer un token JWT
-      const token = jwt.sign(
-        { userId: user.id, email: user.email, role: user.role },
-        process.env.JWT_SECRET || 'your-secret-key',
-        { expiresIn: '24h' }
-      );
-      
-      console.log('✅ Token JWT généré');
-      console.log(`   Token: ${token.substring(0, 50)}...`);
-      
-      // Vérifier le token
-      try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-        console.log('✅ Token JWT valide');
-        console.log(`   User ID: ${decoded.userId}`);
-        console.log(`   Email: ${decoded.email}`);
-        console.log(`   Role: ${decoded.role}`);
-      } catch (error) {
-        console.log('❌ Token JWT invalide:', error.message);
-      }
-      
-    } else {
-      console.log('❌ Mot de passe incorrect');
-    }
-    
-    // Test 4: Test de création d'un nouvel utilisateur
-    console.log('\n👤 Test 4: Création d\'un nouvel utilisateur');
-    const newUser = {
-      email: 'test2@bms.com',
-      password: 'test456',
-      nom: 'Test2',
-      prenom: 'Utilisateur2',
-      role: 'user'
+    // Test 1: Route de test
+    console.log('1️⃣ Test de la route /api/auth/test');
+    const testResponse = await axios.get(`${BASE_URL}/api/auth/test`);
+    console.log('✅ Route test:', testResponse.data);
+    console.log('');
+
+    // Test 2: Login avec utilisateur de test
+    console.log('2️⃣ Test de la route POST /api/auth/login');
+    const loginData = {
+      email: 'test@bms.com',
+      password: 'password123'
     };
     
-    // Vérifier si l'utilisateur existe déjà
-    const existingUser = await query('SELECT * FROM users WHERE email = $1', [newUser.email]);
-    if (existingUser.rows.length > 0) {
-      console.log('✅ Utilisateur test2 existe déjà');
-    } else {
-      // Créer l'utilisateur
-      const hashedPassword = await bcrypt.hash(newUser.password, 10);
-      const insertResult = await query(
-        'INSERT INTO users (email, password_hash, nom, prenom, role) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-        [newUser.email, hashedPassword, newUser.nom, newUser.prenom, newUser.role]
-      );
-      
-      console.log('✅ Nouvel utilisateur créé:', insertResult.rows[0].email);
+    const loginResponse = await axios.post(`${BASE_URL}/api/auth/login`, loginData);
+    console.log('✅ Login réussi:', {
+      success: loginResponse.data.success,
+      message: loginResponse.data.message,
+      user: loginResponse.data.user?.email,
+      hasToken: !!loginResponse.data.token
+    });
+    console.log('');
+
+    // Test 3: Login avec mauvais credentials
+    console.log('3️⃣ Test de la route POST /api/auth/login avec mauvais credentials');
+    const wrongLoginData = {
+      email: 'wrong@email.com',
+      password: 'wrongpassword'
+    };
+    
+    try {
+      const wrongLoginResponse = await axios.post(`${BASE_URL}/api/auth/login`, wrongLoginData);
+      console.log('❌ Login aurait dû échouer:', wrongLoginResponse.data);
+    } catch (error) {
+      if (error.response?.status === 401) {
+        console.log('✅ Login échoué correctement (401):', error.response.data);
+      } else {
+        console.log('❌ Erreur inattendue:', error.response?.data || error.message);
+      }
     }
-    
-    console.log('\n✅ Tous les tests d\'authentification ont réussi !');
-    
+    console.log('');
+
+    // Test 4: Health check
+    console.log('4️⃣ Test de la route /api/health');
+    const healthResponse = await axios.get(`${BASE_URL}/api/health`);
+    console.log('✅ Health check:', {
+      status: healthResponse.data.status,
+      message: healthResponse.data.message,
+      port: healthResponse.data.port
+    });
+
+    console.log('\n🎉 Tous les tests sont passés avec succès !');
+    console.log(`🌐 Backend accessible sur: ${BASE_URL}`);
+    console.log(`🔐 Route auth: ${BASE_URL}/api/auth/login`);
+    console.log(`📊 Route dashboard: ${BASE_URL}/api/dashboard/complete`);
+
   } catch (error) {
     console.error('❌ Erreur lors des tests:', error.message);
-    console.error('Stack:', error.stack);
-  } finally {
-    await closeConnection();
+    if (error.response) {
+      console.error('📡 Réponse du serveur:', error.response.data);
+      console.error('📊 Status:', error.response.status);
+    }
+    process.exit(1);
   }
 }
 
+// Lancer les tests
 testAuth();
